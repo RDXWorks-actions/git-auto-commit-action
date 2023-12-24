@@ -47,7 +47,7 @@ jobs:
       - uses: stefanzweifel/git-auto-commit-action@v5
 ```
 
-> **Note**  
+> [!NOTE]
 > The Action has to be used in a Job that runs on a UNIX system (e.g. `ubuntu-latest`).
 
 The following is an extended example with all available options.
@@ -82,7 +82,7 @@ The following is an extended example with all available options.
     # Optional commit user and author settings
     commit_user_name: My GitHub Actions Bot # defaults to "github-actions[bot]"
     commit_user_email: my-github-actions-bot@example.org # defaults to "41898282+github-actions[bot]@users.noreply.github.com"
-    commit_author: Author <actions@github.com> # defaults to author of the commit that triggered the run
+    commit_author: Author <actions@github.com> # defaults to "username <username@users.noreply.github.com>", where "username" belongs to the author of the commit that triggered the run
 
     # Optional. Tag name being created in the local repository and 
     # pushed to remote repository and defined branch.
@@ -270,25 +270,22 @@ Using command lines options needs to be done manually for each workflow which yo
 
 - [Import GPG Signature](https://github.com/crazy-max/ghaction-import-gpg) (Suggested by [TGTGamer](https://github.com/tgtgamer))
 
-### Push to forks from private repositories
+### Use in forks from private repositories
 
-By default, GitHub Actions doesn't run Workflows on forks from private repositories. To enable Actions for **private** repositories enable "Run workflows from pull requests" in your repository settings.
+By default, GitHub Actions doesn't run Workflows on forks from **private** repositories. To enable Actions for **private** repositories enable "Run workflows from pull requests" in your repository settings.
 
 See [this announcement from GitHub](https://github.blog/2020-08-03-github-actions-improvements-for-fork-and-pull-request-workflows/) or the [GitHub docs](https://docs.github.com/en/github/administering-a-repository/disabling-or-limiting-github-actions-for-a-repository#enabling-workflows-for-private-repository-forks) for details.
 
 
 ### Use in forks from public repositories
 
-<details>
-<summary>Expand to learn more</summary>
-
-> **Note**   
+> [!NOTE] 
 > This Action technically works with forks. However, please note that the combination of triggers and their options can cause issues. Please read [the documentation](https://docs.github.com/en/free-pro-team@latest/actions/reference/events-that-trigger-workflows) on which triggers GitHub Actions support.\
 > Ensure your contributors enable "Allow edits by maintainers" when opening a pull request. ([Learn more](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/allowing-changes-to-a-pull-request-branch-created-from-a-fork)) \
 > \
 > **If you use this Action in combination with a linter/fixer, it's easier if you run the Action on `push` on your `main`-branch.**
 
-> **Warning**   
+> [!WARNING] 
 > Due to limitations of GitHub, this Action currently can't push commits to a base repository, if the fork _lives_ under an organisation. See [github/community#6634](https://github.com/orgs/community/discussions/5634) and [this comment](https://github.com/stefanzweifel/git-auto-commit-action/issues/211#issuecomment-1428849944) for details.
 
 By default, this Action will not run on Pull Requests which have been opened by forks. (This is a limitation by GitHub, not by us.)   
@@ -296,7 +293,15 @@ However, there are a couple of ways to use this Actions in Workflows that should
 
 ### Workflow should run in **base** repository
 
-The workflow below runs whenever a commit is pushed to the `main`-branch or when activity on a pull request happens, by listening to the  [`pull_request_target`](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target) event.
+> [!CAUTION]
+> The following section explains how you can use git-auto-commit in combination with the `pull_request_target` trigger.   
+> **Using `pull_request_target` in your workflows can lead to repository compromise as [mentioned](https://securitylab.github.com/research/github-actions-preventing-pwn-requests/) by GitHub's own security team. This means, that a bad actor could potentially leak/steal your GitHub Actions repository secrets.**   
+> Please be aware of this risk when using `pull_request_target` in your workflows.
+> 
+> If your workflow runs code-fixing tools, consider running the workflow on your default branch by listening to the `push` event or use a third-party tool like [autofix.ci](https://autofix.ci/).   
+> We keep this documentation around, as many questions came in over the years, on how to use this action for public forks.
+
+The workflow below runs whenever a commit is pushed to the `main`-branch or when activity on a pull request happens, by listening to the [`pull_request_target`](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target) event.
 
 If the workflow is triggered by the `pull_request_target`-event, the workflow will run in the context of the base of the pull request, rather than in the context of the merge commit, as the `pull_request` event does.
 In other words, this will allow your workflow to be run in the repository where the pull request is opened to and will push changes back to the fork.
@@ -336,72 +341,19 @@ jobs:
     - uses: stefanzweifel/git-auto-commit-action@v5
 ```
 
-### Workflow should run in **forked** repository
-
-> **Warning**   
-> **This part of the documentation is outdated.**   
-> We were not able to configure a GitHub Action workflow for forks, that the workflow would run in the fork / head repository.
-> Please let us know in the [discussions](https://github.com/stefanzweifel/git-auto-commit-action/discussions)-area, if and how you achieved that.
-
-If the workflow should run in the forked repository, follow these steps:
-
-1. In addition to listening to the `pull_request` event in your Workflow triggers, you have to add an additional event: `pull_request_target`. You can learn more about this event in [the GitHub docs](https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request_target).
-2. GitHub Action has to be enabled on the forked repository. \
-For security reasons, GitHub does not automatically enable GitHub Actions on forks. The user has to explicitly enable GitHub Actions in the "Actions"-tab of the forked repository. (Mention this in your projects README or CONTRIBUTING.md!)
-
-After you have added the `pull_request_target` to your desired Workflow and the forked repository has enabled Actions and a new Pull Request is opened, the Workflow will run **on the forked repository**.
-
-Due to the fact that the Workflow is not run on the repository the Pull Request is opened in, you won't see any status indicators inside the Pull Request.
-
-#### Example
-
-The following workflow runs `php-cs-fixer` (a code linter and fixer for PHP) when a `pull_request` is opened. We've added the `pull_request_target`-trigger too, to make it work for forks.
-
-```yaml
-name: Format PHP
-
-on: [push, pull_request, pull_request_target]
-
-jobs:
-  php-cs-fixer:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Run php-cs-fixer
-      uses: docker://oskarstark/php-cs-fixer-ga
-
-    - uses: stefanzweifel/git-auto-commit-action@v5
-      with:
-        commit_message: Apply php-cs-fixer changes
-```
-
-Next time a user forks your project **and** enabled GitHub Actions **and** opened a Pull Request, the Workflow will run on the **forked** repository and will push commits to the same branch.
-
-Here's how the Pull Request will look like:
-
-![Screenshot of a Pull Request from a Fork](https://user-images.githubusercontent.com/1080923/90955964-9c74c080-e482-11ea-8097-aa7f5161f50e.png)
-
-
-As you can see, your contributors have to go through hoops to make this work. **For Workflows which run linters and fixers (like the example above) we recommend running them when a push happens on the `main`-branch.**
-
-
 For more information about running Actions on forks, see [this announcement from GitHub](https://github.blog/2020-08-03-github-actions-improvements-for-fork-and-pull-request-workflows/).
-
-</details>
 
 ### Using `--amend` and `--no-edit` as commit options
 
-<details>
-<summary>Expand to learn more</summary>
-
 If you would like to use this Action to create a commit using [`--amend`](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt---amend) and [`--no-edit`](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt---no-edit) you need to make some adjustments.
 
-> **Warning**   
+> [!CAUTION] 
 > You should understand the implications of rewriting history if you amend a commit that has already been published. [See rebasing](https://git-scm.com/docs/git-rebase#_recovering_from_upstream_rebase).
 
 First, you need to extract the previous commit message by using `git log -1 --pretty=%s`.
 Then you need to provide this last commit message to the Action through the `commit_message` input option.
+
+By default, the commit author is changed to `username <username@users.noreply.github.com>`, where `username` is the name of the user who triggered the workflow (The [`github.actor`](https://docs.github.com/en/actions/learn-github-actions/contexts#github-context) context is used here). If you want to preserve the name and email of the original author, you must extract them from the last commit and provide them to the Action through the `commit_author` input option.
 
 Finally, you have to use `push_options: '--force'` to overwrite the git history on the GitHub remote repository. (git-auto-commit will not do a `git-rebase` for you!)
 
@@ -416,21 +368,21 @@ The steps in your workflow might look like this:
 # Other steps in your workflow to trigger a changed file
 
 - name: Get last commit message
-  id: last-commit-message
+  id: last-commit
   run: |
-    echo "msg=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+    echo "message=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+    echo "author=$(git log -1 --pretty=\"%an <%ae>\")" >> $GITHUB_OUTPUT
 
 - uses: stefanzweifel/git-auto-commit-action@v5
   with:
-    commit_message: ${{ steps.last-commit-message.outputs.msg }}
+    commit_author: ${{ steps.last-commit.outputs.author }}
+    commit_message: ${{ steps.last-commit.outputs.message }}
     commit_options: '--amend --no-edit'
     push_options: '--force'
     skip_fetch: true
 ```
 
 See discussion in [#159](https://github.com/stefanzweifel/git-auto-commit-action/issues/159#issuecomment-845347950) for details.
-
-</details>
 
 ## Troubleshooting
 ### Action does not push commit to repository
@@ -458,11 +410,10 @@ store the token as a secret in your repository and pass the new token to the [`a
 ```
 You can learn more about Personal Access Token in the [GitHub documentation](https://docs.github.com/en/github/authenticating-to-github/creating-a-personal-access-token).
 
-> **Note**
+> [!TIP] 
 > If you're working in an organisation, and you don't want to create the PAT from your personal account, we recommend using a bot-account for such tokens.
 
-
-If you go the "force pushes" route, you have to enable force pushes to a protected branch (See [documentation](https://help.github.com/en/github/administering-a-repository/enabling-force-pushes-to-a-protected-branch)) and update your Workflow to use force push like this.
+If you go the "force pushes" route, you have to enable force pushes to a protected branch (see [documentation](https://help.github.com/en/github/administering-a-repository/enabling-force-pushes-to-a-protected-branch)) and update your Workflow to use force push like this.
 
 ```yaml
     - uses: stefanzweifel/git-auto-commit-action@v5
@@ -477,7 +428,7 @@ This is due to limitations set up by GitHub, [commits made by this Action do not
 
 ### Pathspec 'x' did not match any files
 
-If you're using the Action with a custom `file_pattern` and the Action throws a fatal error with the message "Pathspec 'file-pattern' did not match any files", the problem is probably that no file for the pattern exists in the repository.
+If you're using the Action with a custom `file_pattern` and the Action throws a fatal error with the message "Pathspec 'file-pattern' did not match any files", the problem is probably that no file for the pattern **exists** in the repository.
 
 `file_pattern` is used both for `git-status` and `git-add` in this Action. `git-add` will throw a fatal error, if for example, you use a file pattern like `*.js *.ts` but no `*.ts` files exist in your projects' repository.
 
